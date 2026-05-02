@@ -44,13 +44,6 @@ async function renderVideo({ imageUrl, voiceoverUrl, jobId }) {
   console.log(`[${jobId}] Downloading voiceover...`);
   await download(voiceoverUrl, audioPath);
 
-  // Get image dimensions
-  const probeImg = execSync(
-    `ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=p=0 "${imagePath}"`
-  ).toString().trim();
-  const [imgW, imgH] = probeImg.split(",").map(Number);
-  console.log(`[${jobId}] Image size: ${imgW}x${imgH}`);
-
   // Get audio duration
   const durationRaw = execSync(
     `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${audioPath}"`
@@ -58,10 +51,9 @@ async function renderVideo({ imageUrl, voiceoverUrl, jobId }) {
   const duration = Math.ceil(parseFloat(durationRaw)) || 30;
   console.log(`[${jobId}] Audio duration: ${duration}s`);
 
-  // If image taller than 1920 → pan down. Otherwise → pad with black bars.
-  const filterComplex = imgH > 1920
-    ? `[0:v]scale=1080:-2[scaled];[scaled]crop=1080:1920:0:'(ih-1920)*t/${duration}'[v]`
-    : `[0:v]scale=1080:-2[scaled];[scaled]pad=1080:1920:0:(1920-ih)/2:black[v]`;
+  // Safe filter: scale to fit 1080x1920, pad remaining space with black
+  // Works on ANY image size — no crop, no dimension errors
+  const filterComplex = `[0:v]scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:black,setsar=1[v]`;
 
   const ffmpegCmd = [
     `ffmpeg -y`,
